@@ -105,6 +105,8 @@
     .rec-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 17px; }
     .rec-updated { display: flex; justify-content: space-between; gap: 12px; margin-top: 15px; padding-top: 13px; border-top: 1px solid rgba(52, 211, 153, .20); color: var(--muted); font-size: 12px; }
     .rec-updated time { color: #d1fae5; font-weight: 800; text-align: right; }
+    .rec-schedule { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px; color: var(--muted); font-size: 12px; }
+    .rec-schedule strong { color: #cffafe; text-align: right; }
 
     .btn { min-height: 38px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-3); color: var(--soft); cursor: pointer; font-weight: 800; }
     .btn:hover { border-color: var(--cyan); color: var(--text); }
@@ -294,6 +296,7 @@
           <a class="btn" id="official-fund-link" href="#" target="_blank" rel="noopener">官方基金頁</a>
         </div>
         <div class="rec-updated"><span>最新更新</span><time id="rec-updated">—</time></div>
+        <div class="rec-schedule"><span>自動更新</span><strong>每週六 12:00（台北時間）</strong></div>
       </aside>
     </section>
 
