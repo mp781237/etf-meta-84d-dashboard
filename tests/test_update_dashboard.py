@@ -1,0 +1,36 @@
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+import pandas as pd
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from update_dashboard import calculate_meta, weekly_signal_dates  # noqa: E402
+
+
+class DashboardStrategyTests(unittest.TestCase):
+    def test_weekly_signal_uses_last_available_session(self) -> None:
+        dates = pd.DatetimeIndex(["2026-07-27", "2026-07-29", "2026-07-31", "2026-08-03"])
+        self.assertEqual(
+            weekly_signal_dates(dates),
+            {pd.Timestamp("2026-07-31"), pd.Timestamp("2026-08-03")},
+        )
+
+    def test_meta_switches_only_after_weekly_decision(self) -> None:
+        dates = pd.bdate_range("2025-01-01", periods=100)
+        top1 = pd.Series(100_000.0, index=dates)
+        top2 = pd.Series(100_000.0, index=dates)
+        top1.iloc[84:] = 102_000.0
+        _, gap, decision, _ = calculate_meta(top1, top2)
+        first_qualified = gap[gap > 0.01].index[0]
+        first_weekly = min(date for date in weekly_signal_dates(dates) if date >= first_qualified)
+        self.assertEqual(decision.loc[first_weekly], 1.0)
+        if first_weekly > first_qualified:
+            self.assertEqual(decision.loc[first_qualified], 0.5)
+
+
+if __name__ == "__main__":
+    unittest.main()
