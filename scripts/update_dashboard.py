@@ -256,6 +256,42 @@ def align_panels_to_complete_sessions(
     return aligned, incomplete_index
 
 
+def merge_ticker_panels(
+    panels: dict[str, pd.DataFrame],
+    replacement: dict[str, pd.DataFrame],
+    ticker: str,
+) -> None:
+    for field, frame in panels.items():
+        if ticker not in replacement[field].columns:
+            continue
+        patch = replacement[field][ticker].reindex(frame.index)
+        frame[ticker] = frame[ticker].combine_first(patch)
+
+
+def repair_incomplete_tickers(
+    panels: dict[str, pd.DataFrame],
+    exclusive_end: str,
+) -> None:
+    affected = [
+        ticker
+        for ticker in TICKERS
+        if any(panels[field][ticker].isna().any() for field in ("Open", "High", "Low", "Close"))
+    ]
+    for ticker in affected:
+        raw = yf.download(
+            ticker,
+            start=DOWNLOAD_START,
+            end=exclusive_end,
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+            group_by="column",
+            timeout=30,
+        )
+        replacement = _extract_download(raw, [ticker])
+        merge_ticker_panels(panels, replacement, ticker)
+
+
 def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], dict]:
     end_date = pd.Timestamp(end) if end else pd.Timestamp.now(tz="Asia/Taipei").tz_localize(None)
     exclusive_end = (end_date.normalize() + pd.Timedelta(days=2)).date().isoformat()
@@ -292,6 +328,7 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
         time.sleep(attempt * 3)
     if panels is None:
         raise RuntimeError("Yahoo價格下載失敗。")
+    repair_incomplete_tickers(panels, exclusive_end)
 
     close = panels["Close"]
     valid = [ticker for ticker in TICKERS if not close[ticker].dropna().empty]
@@ -305,6 +342,12 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
         ticker for ticker, date in latest_by_ticker.items() if date != common_last
     ]
     panels, incomplete_dates = align_panels_to_complete_sessions(panels)
+    incomplete_in_test = incomplete_dates[incomplete_dates >= pd.Timestamp(TEST_START)]
+    if not incomplete_in_test.empty:
+        raise RuntimeError(
+            "Yahoo個別重抓後仍有不完整交易日："
+            f"{[iso_date(date) for date in incomplete_in_test]}"
+        )
     common = panels["Close"]
     common_last = common.index[-1]
     non_positive = int((common <= 0).sum().sum())

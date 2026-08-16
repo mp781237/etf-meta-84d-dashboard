@@ -12,6 +12,7 @@ from update_dashboard import (  # noqa: E402
     TICKERS,
     align_panels_to_complete_sessions,
     calculate_meta,
+    merge_ticker_panels,
     weekly_signal_dates,
 )
 
@@ -30,6 +31,22 @@ class DashboardStrategyTests(unittest.TestCase):
         self.assertEqual(incomplete.tolist(), [dates[1]])
         for frame in aligned.values():
             self.assertEqual(frame.index.tolist(), [dates[0], dates[2]])
+
+    def test_individual_ticker_download_repairs_a_missing_cell(self) -> None:
+        dates = pd.bdate_range("2026-08-10", periods=2)
+        panels = {
+            field: pd.DataFrame(100.0, index=dates, columns=TICKERS)
+            for field in ("Open", "High", "Low", "Close", "Volume")
+        }
+        panels["Close"].at[dates[1], "XLE"] = float("nan")
+        replacement = {
+            field: pd.DataFrame({"XLE": [101.0, 102.0]}, index=dates)
+            for field in panels
+        }
+
+        merge_ticker_panels(panels, replacement, "XLE")
+
+        self.assertEqual(panels["Close"].at[dates[1], "XLE"], 102.0)
 
     def test_weekly_signal_uses_last_available_session(self) -> None:
         dates = pd.DatetimeIndex(["2026-07-27", "2026-07-29", "2026-07-31", "2026-08-03"])
