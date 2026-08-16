@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -39,6 +39,14 @@ jobs:
 
       - name: Validate generated data
         run: python scripts/validate_dashboard.py
+
+      - name: Save verified data in GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/etf_price_history.csv.gz data/etf_meta_dashboard.json assets/etf-meta-dashboard-data.js
+          git diff --cached --quiet || git commit -m "chore: update ETF dashboard data [skip ci]"
+          git push
 
       - name: Prepare static site
         run: |

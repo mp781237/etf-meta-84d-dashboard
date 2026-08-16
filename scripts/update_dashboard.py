@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
 DATA_JS = ASSETS / "etf-meta-dashboard-data.js"
 DATA_JSON = ROOT / "data" / "etf_meta_dashboard.json"
+PRICE_CACHE = ROOT / "data" / "etf_price_history.csv.gz"
 
 DOWNLOAD_START = "2018-06-18"
 TEST_START = "2019-07-01"
@@ -269,6 +270,51 @@ def merge_ticker_panels(
         frame[ticker] = frame[ticker].combine_first(patch)
 
 
+def load_price_cache(max_date: pd.Timestamp | None = None) -> dict[str, pd.DataFrame]:
+    cache = {field: pd.DataFrame() for field in REQUIRED_PRICE_FIELDS}
+    if not PRICE_CACHE.exists():
+        return cache
+    flat = pd.read_csv(PRICE_CACHE, index_col=0, parse_dates=True, compression="gzip")
+    flat.index = pd.DatetimeIndex(flat.index).tz_localize(None)
+    if max_date is not None:
+        flat = flat.loc[flat.index <= max_date.normalize()]
+    for field in REQUIRED_PRICE_FIELDS:
+        prefix = f"{field}__"
+        columns = [column for column in flat.columns if column.startswith(prefix)]
+        frame = flat[columns].copy()
+        frame.columns = [column.removeprefix(prefix) for column in columns]
+        cache[field] = frame.reindex(columns=TICKERS)
+    return cache
+
+
+def merge_price_cache(
+    panels: dict[str, pd.DataFrame],
+    cache: dict[str, pd.DataFrame],
+) -> None:
+    cached_dates = cache["Close"].index
+    if cached_dates.empty:
+        return
+    all_dates = panels["Close"].index.union(cached_dates).sort_values()
+    for field in panels:
+        panels[field] = panels[field].reindex(index=all_dates, columns=TICKERS)
+    for field in REQUIRED_PRICE_FIELDS:
+        cached = cache[field].reindex(index=all_dates, columns=TICKERS)
+        panels[field] = panels[field].combine_first(cached).reindex(columns=TICKERS)
+
+
+def save_price_cache(panels: dict[str, pd.DataFrame]) -> None:
+    PRICE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    flat = pd.concat(
+        [panels[field].add_prefix(f"{field}__") for field in REQUIRED_PRICE_FIELDS],
+        axis=1,
+    )
+    flat.to_csv(
+        PRICE_CACHE,
+        date_format="%Y-%m-%d",
+        compression={"method": "gzip", "compresslevel": 9, "mtime": 0},
+    )
+
+
 def repair_incomplete_tickers(
     panels: dict[str, pd.DataFrame],
     exclusive_end: str,
@@ -330,6 +376,8 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
     if panels is None:
         raise RuntimeError("Yahoo價格下載失敗。")
     repair_incomplete_tickers(panels, exclusive_end)
+    cache = load_price_cache(end_date if end else None)
+    merge_price_cache(panels, cache)
 
     close = panels["Close"]
     valid = [ticker for ticker in TICKERS if not close[ticker].dropna().empty]
@@ -359,6 +407,8 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
             f"stale={stale_tickers}, non_positive={non_positive}, duplicates={duplicate_dates}"
         )
 
+    save_price_cache(panels)
+
     metadata = {
         "source": "Yahoo Finance through yfinance",
         "priceType": "auto-adjusted daily Open/Close",
@@ -369,6 +419,7 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
         "completeTickers": len(valid),
         "missingCells": int(common.isna().sum().sum()),
         "droppedIncompleteSessions": int(len(incomplete_dates)),
+        "cachedSessions": int(len(cache["Close"])),
         "duplicateDates": duplicate_dates,
         "nonPositivePrices": non_positive,
         "status": "pass",

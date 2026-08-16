@@ -12,6 +12,7 @@ from update_dashboard import (  # noqa: E402
     TICKERS,
     align_panels_to_complete_sessions,
     calculate_meta,
+    merge_price_cache,
     merge_ticker_panels,
     weekly_signal_dates,
 )
@@ -61,6 +62,24 @@ class DashboardStrategyTests(unittest.TestCase):
         merge_ticker_panels(panels, replacement, "XLE")
 
         self.assertEqual(panels["Close"].at[dates[1], "XLE"], 102.0)
+
+    def test_price_cache_restores_a_missing_historical_session(self) -> None:
+        dates = pd.bdate_range("2026-07-20", periods=3)
+        panels = {
+            field: pd.DataFrame(100.0, index=dates.delete(1), columns=TICKERS)
+            for field in ("Open", "High", "Low", "Close", "Volume")
+        }
+        cache = {
+            field: pd.DataFrame(101.0, index=dates, columns=TICKERS)
+            for field in ("Open", "Close")
+        }
+
+        merge_price_cache(panels, cache)
+        aligned, incomplete = align_panels_to_complete_sessions(panels)
+
+        self.assertTrue(incomplete.empty)
+        self.assertEqual(aligned["Close"].index.tolist(), dates.tolist())
+        self.assertEqual(aligned["Close"].at[dates[1], "XLE"], 101.0)
 
     def test_weekly_signal_uses_last_available_session(self) -> None:
         dates = pd.DatetimeIndex(["2026-07-27", "2026-07-29", "2026-07-31", "2026-08-03"])
