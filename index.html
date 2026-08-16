@@ -175,6 +175,9 @@
     .switch-item time { color: var(--muted); font: 700 12px/1.2 ui-monospace, Consolas, monospace; }
     .switch-mode { font-weight: 900; }
     .switch-holding { padding: 4px 7px; border-radius: 7px; background: var(--surface-3); color: var(--cyan); font: 900 13px/1 ui-monospace, Consolas, monospace; }
+    .meta-current { display: grid; gap: 5px; margin-bottom: 11px; padding: 11px 12px; border: 1px solid rgba(52, 211, 153, .35); border-radius: 12px; background: rgba(16, 55, 67, .42); }
+    .meta-current strong { color: var(--green); font-size: 13px; }
+    .meta-current span { color: var(--text); font-size: 12px; line-height: 1.45; }
 
     .sector-layout { display: grid; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); gap: 18px; }
     .sector-bars { display: grid; gap: 10px; margin-top: 16px; }
@@ -374,7 +377,8 @@
           <p class="gap-note" id="gap-note">等待Gap84資料。</p>
         </div>
         <aside class="panel">
-          <h3 style="margin-top:0">Meta切換紀錄</h3>
+          <h3 style="margin-top:0">Meta模式切換紀錄</h3>
+          <div class="meta-current" id="meta-current"></div>
           <div class="switch-list" id="switch-list"></div>
         </aside>
       </div>
@@ -483,6 +487,8 @@
       $('#switch-count').textContent = `${meta.switchCount}次`;
       $('#gap-note').textContent = `目前Top1近84日${fmtPct(rec.top1Return84)}，Top2近84日${fmtPct(rec.top2Return84)}；相對領先已超過門檻，但這不是大盤風險開關。`;
       $('#sector-as-of').textContent = `價格與狀態截至 ${meta.dataAsOf}`;
+      const lastModeSwitch = data.switches.at(-1);
+      $('#meta-current').innerHTML = `<strong>最新訊號 ${fmtDate(meta.signalDate)}｜目前維持 ${rec.mode}</strong><span>Top1 持股 <b>${rec.top1Target}</b>；Top2 持股 <b>${rec.top2Target}</b>。本次資料已更新，${rec.mode} 模式的實際持股為 <b>${rec.ticker}</b>，於 ${fmtDate(meta.executeOn)} 下一交易日開盤執行。</span><span>上次 Meta 模式切換：${lastModeSwitch ? `${fmtDate(lastModeSwitch.effectiveDate)} → ${lastModeSwitch.mode}` : '尚無紀錄'}；模式未切換不代表持股沒有換股。</span>`;
 
       $('#copy-summary').addEventListener('click', async () => {
         const text = `${meta.recommendationMonth} 84日Meta策略：${rec.mode}｜持有${rec.ticker} ${rec.sector}｜Gap84 ${fmtPct(rec.gap84)}｜${meta.signalDate}收盤確認，${meta.executeOn}開盤執行｜參考價${fmtPrice(rec.referencePrice)}（${rec.priceDate}）`;
