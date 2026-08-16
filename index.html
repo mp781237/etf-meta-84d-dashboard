@@ -178,11 +178,6 @@
     .meta-current { display: grid; gap: 5px; margin-bottom: 11px; padding: 11px 12px; border: 1px solid rgba(52, 211, 153, .35); border-radius: 12px; background: rgba(16, 55, 67, .42); }
     .meta-current strong { color: var(--green); font-size: 13px; }
     .meta-current span { color: var(--text); font-size: 12px; line-height: 1.45; }
-    .holding-list { display: grid; gap: 8px; max-height: 250px; overflow: auto; padding-right: 4px; }
-    .holding-item { display: grid; grid-template-columns: 82px 1fr; gap: 9px; align-items: start; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(11, 27, 49, .58); }
-    .holding-item time { color: var(--muted); font: 700 11px/1.3 ui-monospace, Consolas, monospace; }
-    .holding-item strong { color: var(--cyan); font-family: ui-monospace, Consolas, monospace; }
-    .holding-item small { display: block; margin-top: 4px; color: var(--muted); line-height: 1.4; }
 
     .sector-layout { display: grid; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); gap: 18px; }
     .sector-bars { display: grid; gap: 10px; margin-top: 16px; }
@@ -372,7 +367,7 @@
           <div class="gap-summary">
             <div class="mini-stat"><span>目前Gap84</span><strong id="gap-current">—</strong></div>
             <div class="mini-stat"><span>目前Meta模式</span><strong id="gap-mode">—</strong></div>
-            <div class="mini-stat"><span>歷史切換</span><strong id="switch-count">—</strong></div>
+            <div class="mini-stat"><span>Meta模式切換</span><strong id="switch-count">—</strong></div>
           </div>
           <div class="chart-wrap" style="min-height:300px">
             <svg class="chart" id="gap-chart" viewBox="0 0 760 300" role="img" aria-label="84日相對報酬走勢與正負1%持有帶"></svg>
@@ -382,11 +377,9 @@
           <p class="gap-note" id="gap-note">等待Gap84資料。</p>
         </div>
         <aside class="panel">
-          <h3 style="margin-top:0">Meta模式切換紀錄</h3>
+          <h3 style="margin-top:0">Meta持股切換紀錄</h3>
           <div class="meta-current" id="meta-current"></div>
           <div class="switch-list" id="switch-list"></div>
-          <h3 style="margin:18px 0 9px">策略持股變更</h3>
-          <div class="holding-list" id="holding-list"></div>
         </aside>
       </div>
     </section>
@@ -496,6 +489,7 @@
       $('#sector-as-of').textContent = `價格與狀態截至 ${meta.dataAsOf}`;
       const lastModeSwitch = data.switches.at(-1);
       const lastHoldingChange = data.holdingChanges?.at(-1);
+      const gapByDate = new Map((data.gap || []).map(item => [item.date, item.value]));
       $('#meta-current').innerHTML = `<strong>最新訊號 ${fmtDate(meta.signalDate)}｜目前維持 ${rec.mode}</strong><span>Top1 持股 <b>${rec.top1Target}</b>；Top2 持股 <b>${rec.top2Target}</b>。本次資料已更新，${rec.mode} 模式的實際持股為 <b>${rec.ticker}</b>，於 ${fmtDate(meta.executeOn)} 下一交易日開盤執行。</span><span>最近持股變更：${lastHoldingChange ? `${fmtDate(lastHoldingChange.effectiveDate)} ${lastHoldingChange.previousActiveHolding} → ${lastHoldingChange.activeHolding}` : '尚無紀錄'}。上次 Meta 模式切換：${lastModeSwitch ? `${fmtDate(lastModeSwitch.effectiveDate)} → ${lastModeSwitch.mode}` : '尚無紀錄'}。</span>`;
 
       $('#copy-summary').addEventListener('click', async () => {
@@ -667,8 +661,25 @@
         });
       }
 
-      $('#switch-list').innerHTML = data.switches.slice().reverse().map(item => `<div class="switch-item"><time>${item.effectiveDate}</time><div><div class="switch-mode">→ ${item.mode}</div><small style="color:var(--muted)">Gap ${fmtPct(item.gap84)}</small></div><span class="switch-holding">${item.holding}</span></div>`).join('');
-      $('#holding-list').innerHTML = (data.holdingChanges || []).slice().reverse().slice(0, 12).map(item => `<div class="holding-item"><time>${item.effectiveDate}</time><div><div><strong>${item.previousActiveHolding} → ${item.activeHolding}</strong>｜${item.mode}${item.modeChanged ? ' 模式切換' : ' 模式內換股'}</div><small>Top1：${item.previousTop1Holding} → ${item.top1Holding}　Top2：${item.previousTop2Holding} → ${item.top2Holding}</small></div></div>`).join('') || '<div class="empty-state">尚無持股變更紀錄</div>';
+      const metaEvents = [
+        ...data.switches.map(item => ({
+          key: `${item.effectiveDate}|${item.mode}|${item.holding}`,
+          effectiveDate: item.effectiveDate,
+          mode: item.mode,
+          holding: item.holding,
+          gap84: item.gap84,
+        })),
+        ...(data.holdingChanges || []).map(item => ({
+          key: `${item.effectiveDate}|${item.mode}|${item.activeHolding}`,
+          effectiveDate: item.effectiveDate,
+          mode: item.mode,
+          holding: item.activeHolding,
+          gap84: gapByDate.get(item.signalDate),
+        })),
+      ];
+      const uniqueMetaEvents = [...new Map(metaEvents.map(item => [item.key, item])).values()]
+        .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+      $('#switch-list').innerHTML = uniqueMetaEvents.map(item => `<div class="switch-item"><time>${item.effectiveDate}</time><div><div class="switch-mode">${item.mode} → ${item.holding}</div><small style="color:var(--muted)">Gap ${fmtPct(item.gap84)}</small></div></div>`).join('');
 
       const statusClass = status => ({ '領先': 'leading', '強勢': 'strong', '改善': 'improving', '反彈': 'rebound', '落後': 'lagging' }[status] || 'lagging');
       let sectorField = 'month';
