@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -237,23 +238,60 @@ def finite_or_none(value: float) -> float | None:
     return round(float(value), 8) if math.isfinite(float(value)) else None
 
 
+def align_panels_to_complete_sessions(
+    panels: dict[str, pd.DataFrame],
+) -> tuple[dict[str, pd.DataFrame], pd.DatetimeIndex]:
+    complete = pd.Series(True, index=panels["Close"].index)
+    for field in ("Open", "High", "Low", "Close"):
+        complete &= panels[field][TICKERS].notna().all(axis=1)
+    complete_index = panels["Close"].index[complete]
+    if complete_index.empty:
+        raise RuntimeError("12檔ETF沒有共同完整OHLC交易日。")
+    incomplete_index = panels["Close"].index[~complete]
+    aligned = {
+        field: frame.reindex(index=complete_index, columns=TICKERS).copy()
+        for field, frame in panels.items()
+    }
+    aligned["Volume"] = aligned["Volume"].fillna(0)
+    return aligned, incomplete_index
+
+
 def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], dict]:
     end_date = pd.Timestamp(end) if end else pd.Timestamp.now(tz="Asia/Taipei").tz_localize(None)
     exclusive_end = (end_date.normalize() + pd.Timedelta(days=2)).date().isoformat()
-    raw = yf.download(
-        TICKERS,
-        start=DOWNLOAD_START,
-        end=exclusive_end,
-        auto_adjust=True,
-        progress=False,
-        threads=True,
-        group_by="column",
-        timeout=30,
-    )
-    panels = _extract_download(raw, TICKERS)
-    for field in panels:
-        panels[field] = panels[field].reindex(columns=TICKERS).sort_index()
-    panels["Volume"] = panels["Volume"].fillna(0)
+    panels: dict[str, pd.DataFrame] | None = None
+    for attempt in range(1, 4):
+        try:
+            raw = yf.download(
+                TICKERS,
+                start=DOWNLOAD_START,
+                end=exclusive_end,
+                auto_adjust=True,
+                progress=False,
+                threads=True,
+                group_by="column",
+                timeout=30,
+            )
+            candidate = _extract_download(raw, TICKERS)
+            for field in candidate:
+                candidate[field] = candidate[field].reindex(columns=TICKERS).sort_index()
+            recent_dates = candidate["Close"].index[-10:]
+            recent_incomplete = pd.Series(False, index=recent_dates)
+            for field in ("Open", "High", "Low", "Close"):
+                recent_incomplete |= candidate[field].loc[recent_dates, TICKERS].isna().any(axis=1)
+            panels = candidate
+            if not recent_incomplete.any() or attempt == 3:
+                break
+            print(
+                f"Yahoo近期資料不完整，第{attempt}次下載後重試："
+                f"{[iso_date(date) for date in recent_dates[recent_incomplete]]}"
+            )
+        except Exception:
+            if attempt == 3:
+                raise
+        time.sleep(attempt * 3)
+    if panels is None:
+        raise RuntimeError("Yahoo價格下載失敗。")
 
     close = panels["Close"]
     valid = [ticker for ticker in TICKERS if not close[ticker].dropna().empty]
@@ -266,6 +304,9 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
     stale_tickers = [
         ticker for ticker, date in latest_by_ticker.items() if date != common_last
     ]
+    panels, incomplete_dates = align_panels_to_complete_sessions(panels)
+    common = panels["Close"]
+    common_last = common.index[-1]
     non_positive = int((common <= 0).sum().sum())
     duplicate_dates = int(common.index.duplicated().sum())
     if stale_tickers or non_positive or duplicate_dates:
@@ -283,6 +324,7 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
         "requestedTickers": len(TICKERS),
         "completeTickers": len(valid),
         "missingCells": int(common.isna().sum().sum()),
+        "droppedIncompleteSessions": int(len(incomplete_dates)),
         "duplicateDates": duplicate_dates,
         "nonPositivePrices": non_positive,
         "status": "pass",

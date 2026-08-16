@@ -21,6 +21,9 @@ def main() -> None:
     for key, value in expected.items():
         if quality.get(key) != value:
             raise RuntimeError(f"品質檢查失敗：{key}={quality.get(key)!r}，預期 {value!r}")
+    dropped = quality.get("droppedIncompleteSessions")
+    if not isinstance(dropped, int) or dropped < 0:
+        raise RuntimeError("排除不完整交易日的數量無效。")
 
     recommendation = payload["recommendation"]
     if recommendation["ticker"] not in {row["ticker"] for row in payload["sectors"]}:

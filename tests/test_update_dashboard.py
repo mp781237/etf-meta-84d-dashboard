@@ -8,10 +8,29 @@ import pandas as pd
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from update_dashboard import calculate_meta, weekly_signal_dates  # noqa: E402
+from update_dashboard import (  # noqa: E402
+    TICKERS,
+    align_panels_to_complete_sessions,
+    calculate_meta,
+    weekly_signal_dates,
+)
 
 
 class DashboardStrategyTests(unittest.TestCase):
+    def test_all_price_panels_drop_a_session_missing_one_ticker(self) -> None:
+        dates = pd.bdate_range("2026-08-10", periods=3)
+        panels = {
+            field: pd.DataFrame(100.0, index=dates, columns=TICKERS)
+            for field in ("Open", "High", "Low", "Close", "Volume")
+        }
+        panels["Close"].at[dates[1], "XLE"] = float("nan")
+
+        aligned, incomplete = align_panels_to_complete_sessions(panels)
+
+        self.assertEqual(incomplete.tolist(), [dates[1]])
+        for frame in aligned.values():
+            self.assertEqual(frame.index.tolist(), [dates[0], dates[2]])
+
     def test_weekly_signal_uses_last_available_session(self) -> None:
         dates = pd.DatetimeIndex(["2026-07-27", "2026-07-29", "2026-07-31", "2026-08-03"])
         self.assertEqual(

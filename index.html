@@ -208,7 +208,7 @@
     .method-card p, .source-card p { margin: 0; color: var(--muted); font-size: 15px; }
     .source-role { color: var(--violet); font-size: 13px; font-weight: 900; }
     .source-link { display: inline-block; margin-top: 13px; font-size: 13px; font-weight: 900; }
-    .quality-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
+    .quality-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 15px; }
     .quality-item { padding: 14px; border: 1px solid var(--border); border-radius: 13px; background: rgba(12, 29, 52, .68); text-align: center; }
     .quality-item span { display: block; color: var(--muted); font-size: 12px; }
     .quality-item strong { display: block; margin-top: 4px; color: #bbf7d0; font-size: 19px; }
@@ -680,6 +680,7 @@
         ['完整ETF', `${quality.completeTickers}/${quality.requestedTickers}`],
         ['共同交易日', quality.sessions.toLocaleString('en-US')],
         ['缺漏價格', String(quality.missingCells)],
+        ['排除不完整日', String(quality.droppedIncompleteSessions ?? 0)],
         ['重複日期', String(quality.duplicateDates)]
       ];
       $('#quality-grid').innerHTML = qualityItems.map(([label, value]) => `<div class="quality-item"><span>${label}</span><strong>${value}</strong></div>`).join('');
