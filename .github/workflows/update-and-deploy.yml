@@ -54,6 +54,7 @@ jobs:
           cp index.html _site/index.html
           cp assets/etf-meta-dashboard-data.js _site/assets/etf-meta-dashboard-data.js
           cp data/etf_meta_dashboard.json _site/data/etf_meta_dashboard.json
+          sed -i "s|etf-meta-dashboard-data.js\"></script>|etf-meta-dashboard-data.js?v=${GITHUB_RUN_ID}\"></script>|" _site/index.html
           touch _site/.nojekyll
 
       - name: Configure GitHub Pages
