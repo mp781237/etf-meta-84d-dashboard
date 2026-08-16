@@ -32,6 +32,20 @@ class DashboardStrategyTests(unittest.TestCase):
         for frame in aligned.values():
             self.assertEqual(frame.index.tolist(), [dates[0], dates[2]])
 
+    def test_unused_high_low_gap_does_not_drop_a_strategy_session(self) -> None:
+        dates = pd.bdate_range("2026-08-10", periods=3)
+        panels = {
+            field: pd.DataFrame(100.0, index=dates, columns=TICKERS)
+            for field in ("Open", "High", "Low", "Close", "Volume")
+        }
+        panels["High"].at[dates[1], "XLE"] = float("nan")
+
+        aligned, incomplete = align_panels_to_complete_sessions(panels)
+
+        self.assertTrue(incomplete.empty)
+        for frame in aligned.values():
+            self.assertEqual(frame.index.tolist(), dates.tolist())
+
     def test_individual_ticker_download_repairs_a_missing_cell(self) -> None:
         dates = pd.bdate_range("2026-08-10", periods=2)
         panels = {

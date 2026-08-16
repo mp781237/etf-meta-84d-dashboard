@@ -18,6 +18,7 @@ DATA_JSON = ROOT / "data" / "etf_meta_dashboard.json"
 
 DOWNLOAD_START = "2018-06-18"
 TEST_START = "2019-07-01"
+REQUIRED_PRICE_FIELDS = ("Open", "Close")
 LOOKBACK_DAYS = 252
 META_LOOKBACK_DAYS = 84
 META_BAND = 0.01
@@ -242,11 +243,11 @@ def align_panels_to_complete_sessions(
     panels: dict[str, pd.DataFrame],
 ) -> tuple[dict[str, pd.DataFrame], pd.DatetimeIndex]:
     complete = pd.Series(True, index=panels["Close"].index)
-    for field in ("Open", "High", "Low", "Close"):
+    for field in REQUIRED_PRICE_FIELDS:
         complete &= panels[field][TICKERS].notna().all(axis=1)
     complete_index = panels["Close"].index[complete]
     if complete_index.empty:
-        raise RuntimeError("12檔ETF沒有共同完整OHLC交易日。")
+        raise RuntimeError("12檔ETF沒有共同完整Open/Close交易日。")
     incomplete_index = panels["Close"].index[~complete]
     aligned = {
         field: frame.reindex(index=complete_index, columns=TICKERS).copy()
@@ -275,7 +276,7 @@ def repair_incomplete_tickers(
     affected = [
         ticker
         for ticker in TICKERS
-        if any(panels[field][ticker].isna().any() for field in ("Open", "High", "Low", "Close"))
+        if any(panels[field][ticker].isna().any() for field in REQUIRED_PRICE_FIELDS)
     ]
     for ticker in affected:
         raw = yf.download(
@@ -313,7 +314,7 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
                 candidate[field] = candidate[field].reindex(columns=TICKERS).sort_index()
             recent_dates = candidate["Close"].index[-10:]
             recent_incomplete = pd.Series(False, index=recent_dates)
-            for field in ("Open", "High", "Low", "Close"):
+            for field in REQUIRED_PRICE_FIELDS:
                 recent_incomplete |= candidate[field].loc[recent_dates, TICKERS].isna().any(axis=1)
             panels = candidate
             if not recent_incomplete.any() or attempt == 3:
@@ -360,7 +361,7 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
 
     metadata = {
         "source": "Yahoo Finance through yfinance",
-        "priceType": "auto-adjusted daily OHLCV",
+        "priceType": "auto-adjusted daily Open/Close",
         "firstDate": iso_date(common.index[0]),
         "lastDate": iso_date(common_last),
         "sessions": int(len(common)),
@@ -628,7 +629,7 @@ def build_payload(end: str | None = None) -> dict:
             {
                 "name": "Yahoo Finance via yfinance",
                 "role": "策略計算主資料",
-                "detail": "調整後日線OHLCV；延續原回測資料定義，避免來源切換造成訊號跳動。",
+                "detail": "調整後日線開盤價與收盤價；延續原回測資料定義，避免來源切換造成訊號跳動。",
                 "url": "https://finance.yahoo.com/",
             },
             {
