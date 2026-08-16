@@ -516,6 +516,47 @@ def effective_date(index: pd.DatetimeIndex, signal_date: pd.Timestamp) -> pd.Tim
     return signal_date + pd.offsets.BDay(1)
 
 
+def build_holding_changes(
+    signal_dates: list[pd.Timestamp],
+    common_index: pd.DatetimeIndex,
+    decision: pd.Series,
+    top1_targets: pd.DataFrame,
+    top2_targets: pd.DataFrame,
+) -> list[dict]:
+    changes: list[dict] = []
+    previous: dict[str, str] | None = None
+    for signal_date in signal_dates:
+        if signal_date not in decision.index:
+            continue
+        top1_holding = target_on(top1_targets, signal_date)
+        top2_holding = target_on(top2_targets, signal_date)
+        mode = "Top1" if decision.loc[signal_date] == 1 else "Top2"
+        active_holding = top1_holding if mode == "Top1" else top2_holding
+        current = {
+            "mode": mode,
+            "activeHolding": active_holding,
+            "top1Holding": top1_holding,
+            "top2Holding": top2_holding,
+        }
+        if previous and current != previous:
+            changes.append(
+                {
+                    "signalDate": iso_date(signal_date),
+                    "effectiveDate": iso_date(effective_date(common_index, signal_date)),
+                    "mode": mode,
+                    "activeHolding": active_holding,
+                    "previousActiveHolding": previous["activeHolding"],
+                    "top1Holding": top1_holding,
+                    "top2Holding": top2_holding,
+                    "previousTop1Holding": previous["top1Holding"],
+                    "previousTop2Holding": previous["top2Holding"],
+                    "modeChanged": mode != previous["mode"],
+                }
+            )
+        previous = current
+    return changes
+
+
 def classify_sector(rank: int, excess_252: float, excess_21: float, excess_63: float) -> str:
     if rank <= 2 and excess_252 > 0:
         return "領先"
@@ -602,6 +643,9 @@ def build_payload(end: str | None = None) -> dict:
     meta_mode = "Top1" if decision.loc[last_signal] == 1 else "Top2"
     recommendation = top1_target if meta_mode == "Top1" else top2_target
     execute_on = effective_date(common_close.index, last_signal)
+    holding_changes = build_holding_changes(
+        signal_dates, common_close.index, decision, top1_targets, top2_targets
+    )
 
     changes = decision[decision.ne(decision.shift()) & decision.isin([0.0, 1.0])]
     switch_rows = []
@@ -676,6 +720,7 @@ def build_payload(end: str | None = None) -> dict:
         ],
         "sectors": sector_rows,
         "switches": switch_rows,
+        "holdingChanges": holding_changes,
         "sources": [
             {
                 "name": "Yahoo Finance via yfinance",

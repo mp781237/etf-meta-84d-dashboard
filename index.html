@@ -178,6 +178,11 @@
     .meta-current { display: grid; gap: 5px; margin-bottom: 11px; padding: 11px 12px; border: 1px solid rgba(52, 211, 153, .35); border-radius: 12px; background: rgba(16, 55, 67, .42); }
     .meta-current strong { color: var(--green); font-size: 13px; }
     .meta-current span { color: var(--text); font-size: 12px; line-height: 1.45; }
+    .holding-list { display: grid; gap: 8px; max-height: 250px; overflow: auto; padding-right: 4px; }
+    .holding-item { display: grid; grid-template-columns: 82px 1fr; gap: 9px; align-items: start; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: rgba(11, 27, 49, .58); }
+    .holding-item time { color: var(--muted); font: 700 11px/1.3 ui-monospace, Consolas, monospace; }
+    .holding-item strong { color: var(--cyan); font-family: ui-monospace, Consolas, monospace; }
+    .holding-item small { display: block; margin-top: 4px; color: var(--muted); line-height: 1.4; }
 
     .sector-layout { display: grid; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); gap: 18px; }
     .sector-bars { display: grid; gap: 10px; margin-top: 16px; }
@@ -380,6 +385,8 @@
           <h3 style="margin-top:0">Meta模式切換紀錄</h3>
           <div class="meta-current" id="meta-current"></div>
           <div class="switch-list" id="switch-list"></div>
+          <h3 style="margin:18px 0 9px">策略持股變更</h3>
+          <div class="holding-list" id="holding-list"></div>
         </aside>
       </div>
     </section>
@@ -488,7 +495,8 @@
       $('#gap-note').textContent = `目前Top1近84日${fmtPct(rec.top1Return84)}，Top2近84日${fmtPct(rec.top2Return84)}；相對領先已超過門檻，但這不是大盤風險開關。`;
       $('#sector-as-of').textContent = `價格與狀態截至 ${meta.dataAsOf}`;
       const lastModeSwitch = data.switches.at(-1);
-      $('#meta-current').innerHTML = `<strong>最新訊號 ${fmtDate(meta.signalDate)}｜目前維持 ${rec.mode}</strong><span>Top1 持股 <b>${rec.top1Target}</b>；Top2 持股 <b>${rec.top2Target}</b>。本次資料已更新，${rec.mode} 模式的實際持股為 <b>${rec.ticker}</b>，於 ${fmtDate(meta.executeOn)} 下一交易日開盤執行。</span><span>上次 Meta 模式切換：${lastModeSwitch ? `${fmtDate(lastModeSwitch.effectiveDate)} → ${lastModeSwitch.mode}` : '尚無紀錄'}；模式未切換不代表持股沒有換股。</span>`;
+      const lastHoldingChange = data.holdingChanges?.at(-1);
+      $('#meta-current').innerHTML = `<strong>最新訊號 ${fmtDate(meta.signalDate)}｜目前維持 ${rec.mode}</strong><span>Top1 持股 <b>${rec.top1Target}</b>；Top2 持股 <b>${rec.top2Target}</b>。本次資料已更新，${rec.mode} 模式的實際持股為 <b>${rec.ticker}</b>，於 ${fmtDate(meta.executeOn)} 下一交易日開盤執行。</span><span>最近持股變更：${lastHoldingChange ? `${fmtDate(lastHoldingChange.effectiveDate)} ${lastHoldingChange.previousActiveHolding} → ${lastHoldingChange.activeHolding}` : '尚無紀錄'}。上次 Meta 模式切換：${lastModeSwitch ? `${fmtDate(lastModeSwitch.effectiveDate)} → ${lastModeSwitch.mode}` : '尚無紀錄'}。</span>`;
 
       $('#copy-summary').addEventListener('click', async () => {
         const text = `${meta.recommendationMonth} 84日Meta策略：${rec.mode}｜持有${rec.ticker} ${rec.sector}｜Gap84 ${fmtPct(rec.gap84)}｜${meta.signalDate}收盤確認，${meta.executeOn}開盤執行｜參考價${fmtPrice(rec.referencePrice)}（${rec.priceDate}）`;
@@ -660,6 +668,7 @@
       }
 
       $('#switch-list').innerHTML = data.switches.slice().reverse().map(item => `<div class="switch-item"><time>${item.effectiveDate}</time><div><div class="switch-mode">→ ${item.mode}</div><small style="color:var(--muted)">Gap ${fmtPct(item.gap84)}</small></div><span class="switch-holding">${item.holding}</span></div>`).join('');
+      $('#holding-list').innerHTML = (data.holdingChanges || []).slice().reverse().slice(0, 12).map(item => `<div class="holding-item"><time>${item.effectiveDate}</time><div><div><strong>${item.previousActiveHolding} → ${item.activeHolding}</strong>｜${item.mode}${item.modeChanged ? ' 模式切換' : ' 模式內換股'}</div><small>Top1：${item.previousTop1Holding} → ${item.top1Holding}　Top2：${item.previousTop2Holding} → ${item.top2Holding}</small></div></div>`).join('') || '<div class="empty-state">尚無持股變更紀錄</div>';
 
       const statusClass = status => ({ '領先': 'leading', '強勢': 'strong', '改善': 'improving', '反彈': 'rebound', '落後': 'lagging' }[status] || 'lagging');
       let sectorField = 'month';

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from update_dashboard import (  # noqa: E402
     TICKERS,
     align_panels_to_complete_sessions,
+    build_holding_changes,
     calculate_meta,
     merge_price_cache,
     merge_ticker_panels,
@@ -99,6 +100,26 @@ class DashboardStrategyTests(unittest.TestCase):
         self.assertEqual(decision.loc[first_weekly], 1.0)
         if first_weekly > first_qualified:
             self.assertEqual(decision.loc[first_qualified], 0.5)
+
+    def test_holding_changes_capture_rotation_inside_same_meta_mode(self) -> None:
+        dates = pd.bdate_range("2026-08-03", periods=10)
+        signal_dates = sorted(weekly_signal_dates(dates))
+        top1_targets = pd.DataFrame(False, index=dates, columns=["SPY", "XLK", "XLE"])
+        top2_targets = pd.DataFrame(False, index=dates, columns=["SPY", "XLK", "XLE"])
+        top1_targets.loc[signal_dates[0], "XLK"] = True
+        top1_targets.loc[signal_dates[1], "XLE"] = True
+        top2_targets.loc[signal_dates[0], "XLE"] = True
+        top2_targets.loc[signal_dates[1], "XLK"] = True
+        decision = pd.Series(1.0, index=dates)
+
+        changes = build_holding_changes(
+            signal_dates, dates, decision, top1_targets, top2_targets
+        )
+
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["previousActiveHolding"], "XLK")
+        self.assertEqual(changes[0]["activeHolding"], "XLE")
+        self.assertFalse(changes[0]["modeChanged"])
 
 
 if __name__ == "__main__":
