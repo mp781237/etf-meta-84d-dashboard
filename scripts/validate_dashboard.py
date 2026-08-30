@@ -24,6 +24,9 @@ def main() -> None:
     dropped = quality.get("droppedIncompleteSessions")
     if not isinstance(dropped, int) or dropped < 0:
         raise RuntimeError("排除不完整交易日的數量無效。")
+    trailing = quality.get("trailingIncompleteSessions", 0)
+    if not isinstance(trailing, int) or trailing < 0:
+        raise RuntimeError("尾端不完整交易日的數量無效。")
 
     recommendation = payload["recommendation"]
     if recommendation["ticker"] not in {row["ticker"] for row in payload["sectors"]}:

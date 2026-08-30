@@ -386,19 +386,22 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
     if missing_tickers or common.empty:
         raise RuntimeError(f"價格下載不完整：{missing_tickers or '沒有共同交易日'}")
     latest_by_ticker = {ticker: close[ticker].last_valid_index() for ticker in TICKERS}
-    common_last = common.index[-1]
-    stale_tickers = [
-        ticker for ticker, date in latest_by_ticker.items() if date != common_last
-    ]
     panels, incomplete_dates = align_panels_to_complete_sessions(panels)
-    incomplete_in_test = incomplete_dates[incomplete_dates >= pd.Timestamp(TEST_START)]
+    common = panels["Close"]
+    common_last = common.index[-1]
+    incomplete_in_test = incomplete_dates[
+        (incomplete_dates >= pd.Timestamp(TEST_START))
+        & (incomplete_dates < common_last)
+    ]
     if not incomplete_in_test.empty:
         raise RuntimeError(
             "Yahoo個別重抓後仍有不完整交易日："
             f"{[iso_date(date) for date in incomplete_in_test]}"
         )
-    common = panels["Close"]
-    common_last = common.index[-1]
+    stale_tickers = [
+        ticker for ticker, date in latest_by_ticker.items() if date < common_last
+    ]
+    trailing_incomplete_sessions = int((incomplete_dates > common_last).sum())
     non_positive = int((common <= 0).sum().sum())
     duplicate_dates = int(common.index.duplicated().sum())
     if stale_tickers or non_positive or duplicate_dates:
@@ -419,6 +422,7 @@ def download_prices(end: str | None = None) -> tuple[dict[str, pd.DataFrame], di
         "completeTickers": len(valid),
         "missingCells": int(common.isna().sum().sum()),
         "droppedIncompleteSessions": int(len(incomplete_dates)),
+        "trailingIncompleteSessions": trailing_incomplete_sessions,
         "cachedSessions": int(len(cache["Close"])),
         "duplicateDates": duplicate_dates,
         "nonPositivePrices": non_positive,

@@ -12,6 +12,8 @@ GitHub Actions 每週六 12:00（Asia/Taipei）直接在 GitHub 雲端下載最�
 
 也可以在儲存庫的 Actions 頁面手動執行 `Update ETF data and deploy Pages`。
 
+若 Yahoo 在週末尚未補齊週五全部 ETF 的 Open／Close，品質閘門會保留最後完整交易日計算，並在頁面「尾端待確認日」標示未採用的尾端資料；歷史中段缺漏仍會停止部署。
+
 ## 網頁內容
 
 - 當月建議持股與完整決策鏈

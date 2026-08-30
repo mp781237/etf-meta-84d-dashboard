@@ -48,6 +48,19 @@ class DashboardStrategyTests(unittest.TestCase):
         for frame in aligned.values():
             self.assertEqual(frame.index.tolist(), dates.tolist())
 
+    def test_trailing_incomplete_session_can_be_excluded_safely(self) -> None:
+        dates = pd.bdate_range("2026-08-24", periods=3)
+        panels = {
+            field: pd.DataFrame(100.0, index=dates, columns=TICKERS)
+            for field in ("Open", "High", "Low", "Close", "Volume")
+        }
+        panels["Close"].at[dates[-1], "XLE"] = float("nan")
+
+        aligned, incomplete = align_panels_to_complete_sessions(panels)
+
+        self.assertEqual(incomplete.tolist(), [dates[-1]])
+        self.assertEqual(aligned["Close"].index[-1], dates[-2])
+
     def test_individual_ticker_download_repairs_a_missing_cell(self) -> None:
         dates = pd.bdate_range("2026-08-10", periods=2)
         panels = {
